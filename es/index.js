@@ -1,6 +1,6 @@
 import isRetryAllowed from 'is-retry-allowed';
 
-const namespace = 'axios-retry';
+const namespace = Symbol('axios-retry');
 
 /**
  * @param  {Error}  error
@@ -78,18 +78,6 @@ export function exponentialDelay(retryNumber = 0) {
   const delay = Math.pow(2, retryNumber) * 100;
   const randomSum = delay * 0.2 * Math.random(); // 0-20% of the delay
   return delay + randomSum;
-}
-
-/**
- * Initializes and returns the retry state for the given request/config
- * @param  {AxiosRequestConfig} config
- * @return {Object}
- */
-function getCurrentState(config) {
-  const currentState = config[namespace] || {};
-  currentState.retryCount = currentState.retryCount || 0;
-  config[namespace] = currentState;
-  return currentState;
 }
 
 /**
@@ -171,14 +159,14 @@ function fixConfig(axios, config) {
  *        A function to determine the delay between retry requests
  */
 export default function axiosRetry(axios, defaultOptions) {
-  axios.interceptors.request.use(config => {
-    const currentState = getCurrentState(config);
-    currentState.lastRequestTime = Date.now();
-    return config;
+  axios.interceptors.request.use(request => {
+    request.lastRequestTime = Date.now();
+    request.retryCount = request.retryCount || 0;
+    return request;
   });
 
   axios.interceptors.response.use(null, error => {
-    const config = error.config;
+    const { config } = error;
 
     // If we have no information to retry the request
     if (!config) {
@@ -186,26 +174,23 @@ export default function axiosRetry(axios, defaultOptions) {
     }
 
     const {
-      retries = 3,
       retryCondition = isNetworkOrIdempotentRequestError,
       retryDelay = noDelay,
       shouldResetTimeout = false
     } = getRequestOptions(config, defaultOptions);
 
-    const currentState = getCurrentState(config);
-
-    const shouldRetry = retryCondition(error) && currentState.retryCount < retries;
+    const shouldRetry = retryCondition(error) && config.retryCount < config.retries;
 
     if (shouldRetry) {
-      currentState.retryCount += 1;
-      const delay = retryDelay(currentState.retryCount, error);
+      config.retryCount += 1;
+      const delay = retryDelay(config.retryCount, error);
 
       // Axios fails merging this configuration to the default configuration because it has an issue
       // with circular structures: https://github.com/mzabriskie/axios/issues/370
       fixConfig(axios, config);
 
-      if (!shouldResetTimeout && config.timeout && currentState.lastRequestTime) {
-        const lastRequestDuration = Date.now() - currentState.lastRequestTime;
+      if (!shouldResetTimeout && config.timeout && config.lastRequestTime) {
+        const lastRequestDuration = Date.now() - config.lastRequestTime;
         // Minimum 1ms timeout (passing 0 or less to XHR means no timeout)
         config.timeout = Math.max(config.timeout - lastRequestDuration - delay, 1);
       }

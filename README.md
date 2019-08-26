@@ -4,6 +4,9 @@
 
 Axios plugin that intercepts failed requests and retries them whenever possible.
 
+> **WARNING**: This is a custom implementation of axios-retry that makes it compatible with `axios@0.19.0`, and also allows to specify wich requests can
+be retried, instead of retrying all of them.
+
 ## Installation
 
 ```bash
@@ -41,17 +44,6 @@ axiosRetry(client, { retries: 3 });
 client.get('/test') // The first request fails and the second returns 'ok'
   .then(result => {
     result.data; // 'ok'
-  });
-
-// Allows request-specific configuration
-client
-  .get('/test', {
-    'axios-retry': {
-      retries: 0
-    }
-  })
-  .catch(error => { // The first request fails
-    error !== undefined
   });
 ```
 
